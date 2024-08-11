@@ -1,8 +1,12 @@
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Memory;
-using CounterStrikeSharp.API.Modules.Memory.DynamicFunctions;
-using static AdvancedWeaponSystem.AdvancedWeaponSystem;
 using static CounterStrikeSharp.API.Core.Listeners;
+using static AdvancedWeaponSystem.AdvancedWeaponSystem;
+using CounterStrikeSharp.API.Modules.Memory.DynamicFunctions;
+using CounterStrikeSharp.API.Modules.Utils;
+using CounterStrikeSharp.API;
+using static AdvancedWeaponSystem.Config;
+using System.Runtime.InteropServices;
 
 namespace AdvancedWeaponSystem;
 
@@ -10,35 +14,25 @@ public static class Event
 {
     public static void Load()
     {
-        Instance.RegisterListener<OnEntitySpawned>(OnEntitySpawned);
         Instance.RegisterEventHandler<EventWeaponFire>(OnWeaponFire);
-        VirtualFunctions.CCSPlayer_WeaponServices_CanUseFunc.Hook(OnWeaponPickUp, HookMode.Pre);
+        Instance.RegisterEventHandler<EventItemEquip>(OnItemEquip);
+        Instance.RegisterListener<OnEntitySpawned>(OnEntitySpawned);
+        Instance.RegisterListener<OnEntityCreated>(OnEntityCreated);
+        Instance.RegisterListener<OnServerPrecacheResources>(OnServerPrecacheResources);
+
+        VirtualFunctions.CCSPlayer_WeaponServices_CanUseFunc.Hook(OnCanUse, HookMode.Pre);
     }
 
     public static void Unload()
     {
         Instance.RemoveListener<OnEntitySpawned>(OnEntitySpawned);
-        VirtualFunctions.CCSPlayer_WeaponServices_CanUseFunc.Unhook(OnWeaponPickUp, HookMode.Pre);
+        Instance.RemoveListener<OnEntityCreated>(OnEntityCreated);
+        VirtualFunctions.CCSPlayer_WeaponServices_CanUseFunc.Unhook(OnCanUse, HookMode.Pre);
     }
 
-    public static HookResult OnWeaponPickUp(DynamicHook hook)
+    private static HookResult OnWeaponFire(EventWeaponFire @event, GameEventInfo info)
     {
-        CBasePlayerWeapon weapon = hook.GetParam<CBasePlayerWeapon>(1);
-
-        if (Instance.Config.WeaponDataList.FirstOrDefault(w => w.WeaponName == weapon.DesignerName && w.BlockToUse == true) == null)
-        {
-            return HookResult.Continue;
-        }
-
-        hook.SetReturn(false);
-        return HookResult.Changed;
-    }
-
-    public static HookResult OnWeaponFire(EventWeaponFire @event, GameEventInfo info)
-    {
-        WeaponData? weaponData;
-
-        if ((weaponData = Instance.Config.WeaponDataList.FirstOrDefault(w => w.WeaponName == @event.Weapon)) == null)
+        if (!Instance.Config.WeaponDataList.TryGetValue(@event.Weapon, out WeaponData? weaponData) || weaponData == null)
         {
             return HookResult.Continue;
         }
@@ -63,62 +57,139 @@ public static class Event
 
         if (weaponData.ReloadAfterShoot == true)
         {
+            CCSWeaponBaseVData? weaponSlot = activeWeapon.As<CCSWeaponBase>().VData;
+
+            if (weaponSlot == null)
+            {
+                return HookResult.Continue;
+            }
+
             player!.ExecuteClientCommand("slot3");
 
             Instance.AddTimer(0.1f, () =>
             {
-                player.ExecuteClientCommand("slot2");
+                player.ExecuteClientCommand($"slot{(uint)weaponSlot.GearSlot + 1}");
             });
         }
 
         return HookResult.Continue;
     }
 
-    public static void OnEntitySpawned(CEntityInstance entity)
+    private static HookResult OnItemEquip(EventItemEquip @event, GameEventInfo info)
     {
-        WeaponData? weaponData;
+        CCSPlayerController? player = @event.Userid;
+        CBasePlayerWeapon? activeweapon = player?.PlayerPawn.Value?.WeaponServices?.ActiveWeapon.Value;
 
-        if ((weaponData = Instance.Config.WeaponDataList.FirstOrDefault(w => w.WeaponName == entity.DesignerName)) == null)
+        if (activeweapon == null)
+        {
+            return HookResult.Continue;
+        }
+
+        string globalname = activeweapon.Globalname;
+
+        if (!string.IsNullOrEmpty(globalname))
+        {
+            ViewModel(player!)?.SetModel(globalname.Split(',')[1]);
+        }
+
+        return HookResult.Continue;
+    }
+
+    private static void OnEntitySpawned(CEntityInstance entity)
+    {
+        if (!Instance.Config.WeaponDataList.TryGetValue(entity.DesignerName, out WeaponData? weaponData))
         {
             return;
         }
 
-        CBasePlayerWeapon? weapon = entity.As<CBasePlayerWeapon>();
+        CCSWeaponBaseVData? weaponVData = entity.As<CCSWeaponBase>().VData;
 
-        if (weapon == null)
+        if (weaponVData == null)
         {
             return;
-        }
-
-        CCSWeaponBaseVData? weaponbaseData = weapon.As<CCSWeaponBase>().VData;
-
-        if (weaponbaseData != null)
-        {
-            if (weaponData.Clip.HasValue)
-            {
-                weaponbaseData.MaxClip1 = weaponData.Clip.Value;
-                weaponbaseData.DefaultClip1 = weaponData.Clip.Value;
-            }
-
-            if (weaponData.Ammo.HasValue)
-            {
-                weaponbaseData.SecondaryReserveAmmoMax = weaponData.Ammo.Value;
-            }
-
-            if (weaponData.Slot.HasValue)
-            {
-                weaponbaseData.DefaultLoadoutSlot = (loadout_slot_t)weaponData.Slot.Value;
-            }
         }
 
         if (weaponData.Clip.HasValue)
         {
-            weapon.Clip1 = weaponData.Clip.Value;
+            weaponVData.MaxClip1 = weaponData.Clip.Value;
         }
 
         if (weaponData.Ammo.HasValue)
         {
-            weapon.ReserveAmmo[0] = weaponData.Ammo.Value;
+            weaponVData.PrimaryReserveAmmoMax = weaponData.Ammo.Value;
         }
+    }
+
+    private static void OnEntityCreated(CEntityInstance entity)
+    {
+        if (!Instance.Config.WeaponDataList.TryGetValue(entity.DesignerName, out WeaponData? weaponData) || string.IsNullOrEmpty(weaponData.Model))
+        {
+            return;
+        }
+
+        CBasePlayerWeapon weapon = entity.As<CBasePlayerWeapon>();
+
+        Server.NextWorldUpdate(() =>
+        {
+            if (!weapon.IsValid || weapon.OriginalOwnerXuidLow <= 0)
+            {
+                return;
+            }
+
+            CCSPlayerController? player = Utilities.GetPlayerFromSteamId(weapon.OriginalOwnerXuidLow);
+
+            if (player == null)
+            {
+                return;
+            }
+
+            weapon.Globalname = $"{ViewModel(player)?.VMName},{weaponData.Model}";
+            weapon.SetModel(weaponData.Model);
+        });
+    }
+
+    private static void OnServerPrecacheResources(ResourceManifest manifest)
+    {
+        foreach (KeyValuePair<string, WeaponData> weaponData in Instance.Config.WeaponDataList)
+        {
+            if (!string.IsNullOrEmpty(weaponData.Value.Model))
+            {
+                manifest.AddResource(weaponData.Value.Model);
+            }
+        }
+    }
+
+    private static HookResult OnCanUse(DynamicHook hook)
+    {
+        CBasePlayerWeapon weapon = hook.GetParam<CBasePlayerWeapon>(1);
+
+        if (!Instance.Config.WeaponDataList.TryGetValue(weapon.DesignerName, out WeaponData? weaponData) || weaponData?.BlockUsing != true)
+        {
+            return HookResult.Continue;
+        }
+
+        weapon.Remove();
+        Server.PrintToChatAll($"You cannot use {weapon.DesignerName}");
+        hook.SetReturn(false);
+        return HookResult.Handled;
+    }
+
+    private static unsafe CBaseViewModel? ViewModel(CCSPlayerController player)
+    {
+        nint? handle = player.PlayerPawn.Value?.ViewModelServices?.Handle;
+
+        if (handle == null || !handle.HasValue)
+        {
+            return null;
+        }
+
+        CCSPlayer_ViewModelServices viewModelServices = new(handle.Value);
+
+        nint ptr = viewModelServices.Handle + Schema.GetSchemaOffset("CCSPlayer_ViewModelServices", "m_hViewModel");
+        Span<nint> viewModels = MemoryMarshal.CreateSpan(ref ptr, 3);
+
+        CHandle<CBaseViewModel> viewModel = new(viewModels[0]);
+
+        return viewModel.Value;
     }
 }
