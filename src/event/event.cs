@@ -1,12 +1,13 @@
+using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Memory;
-using static CounterStrikeSharp.API.Core.Listeners;
-using static AdvancedWeaponSystem.AdvancedWeaponSystem;
 using CounterStrikeSharp.API.Modules.Memory.DynamicFunctions;
 using CounterStrikeSharp.API.Modules.Utils;
-using CounterStrikeSharp.API;
-using static AdvancedWeaponSystem.Config;
 using System.Runtime.InteropServices;
+using static AdvancedWeaponSystem.AdvancedWeaponSystem;
+using static AdvancedWeaponSystem.Config;
+using static CounterStrikeSharp.API.Core.Listeners;
 
 namespace AdvancedWeaponSystem;
 
@@ -168,8 +169,24 @@ public static class Event
             return HookResult.Continue;
         }
 
+        CCSPlayer_WeaponServices weaponServices = hook.GetParam<CCSPlayer_WeaponServices>(0);
+        CCSPlayerController? player = weaponServices.Pawn.Value.Controller.Value?.As<CCSPlayerController>();
+
+        if (player == null)
+        {
+            return HookResult.Continue;
+        }
+
+        string[]? flags = weaponData.AdminFlagToIgnoreBlockUsing;
+
+        if (flags?.Length > 0 && AdminManager.PlayerHasPermissions(player, flags))
+        {
+            return HookResult.Continue;
+        }
+
+        player.PrintToChat($"You cannot use {weapon.DesignerName}");
+
         weapon.Remove();
-        Server.PrintToChatAll($"You cannot use {weapon.DesignerName}");
         hook.SetReturn(false);
         return HookResult.Handled;
     }

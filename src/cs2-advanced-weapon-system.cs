@@ -1,12 +1,4 @@
-using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API.Modules.Memory;
-using CounterStrikeSharp.API.Modules.Memory.DynamicFunctions;
-using CounterStrikeSharp.API.Modules.Utils;
-using System.Runtime.InteropServices;
-using System.Text.Json.Serialization;
-using static AdvancedWeaponSystem.Config;
-using static CounterStrikeSharp.API.Core.Listeners;
 
 namespace AdvancedWeaponSystem;
 
