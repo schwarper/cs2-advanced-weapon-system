@@ -14,7 +14,7 @@ public class Config : BasePluginConfig
         public bool? UnlimitedAmmo { get; set; }
         public bool? UnlimitedClip { get; set; }
         public string? Model { get; set; }
-        public string[]? AdminFlagToIgnoreBlockUsing { get; set; }
+        public string[]? AdminFlagsToIgnoreBlockUsing { get; set; }
     }
 
     [JsonPropertyName("Weapons")]

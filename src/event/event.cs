@@ -177,7 +177,7 @@ public static class Event
             return HookResult.Continue;
         }
 
-        string[]? flags = weaponData.AdminFlagToIgnoreBlockUsing;
+        string[]? flags = weaponData.AdminFlagsToIgnoreBlockUsing;
 
         if (flags?.Length > 0 && AdminManager.PlayerHasPermissions(player, flags))
         {
