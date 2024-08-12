@@ -13,6 +13,8 @@ Discord link : [Discord server](https://discord.gg/4zQfUzjk36)
 > Ammo => sets ammo of weapon
 > 
 > BlockUsing => blocks using weapon
+>
+> AdminFlagsToIgnoreBlockUsing => Ignores admins who has flags from BlockUsing
 > 
 > ReloadAfterShoot => forces reload after shooting (slot system, slot3, slot2 etc)
 > 
