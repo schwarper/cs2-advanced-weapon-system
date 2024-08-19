@@ -28,7 +28,7 @@ Discord link : [Discord server](https://discord.gg/4zQfUzjk36)
 >
 > WeaponQuota => Sets a limit on the number of the weapon each team can own based on the number of players.
 >
-> Damage => Sets weapon damage
+> Damage => Sets weapon damage (‘2’ sets 2. ‘/2’ divides by two. ‘*2’ multiplies by two. “+2” adds 2. ‘-2’ Removes 2.)
 
 
 Example;
