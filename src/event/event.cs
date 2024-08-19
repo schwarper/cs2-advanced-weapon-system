@@ -1,6 +1,5 @@
-using CounterStrikeSharp.API;
+﻿using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Memory;
 using CounterStrikeSharp.API.Modules.Memory.DynamicFunctions;
 using CounterStrikeSharp.API.Modules.Utils;
@@ -17,11 +16,13 @@ public static class Event
     {
         Instance.RegisterEventHandler<EventWeaponFire>(OnWeaponFire);
         Instance.RegisterEventHandler<EventItemEquip>(OnItemEquip);
+        Instance.RegisterEventHandler<EventItemPurchase>(OnItemPurchase, HookMode.Pre);
         Instance.RegisterListener<OnEntitySpawned>(OnEntitySpawned);
         Instance.RegisterListener<OnEntityCreated>(OnEntityCreated);
         Instance.RegisterListener<OnServerPrecacheResources>(OnServerPrecacheResources);
 
         VirtualFunctions.CCSPlayer_WeaponServices_CanUseFunc.Hook(OnCanUse, HookMode.Pre);
+        VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Hook(OnTakeDamage, HookMode.Pre);
     }
 
     public static void Unload()
@@ -29,11 +30,12 @@ public static class Event
         Instance.RemoveListener<OnEntitySpawned>(OnEntitySpawned);
         Instance.RemoveListener<OnEntityCreated>(OnEntityCreated);
         VirtualFunctions.CCSPlayer_WeaponServices_CanUseFunc.Unhook(OnCanUse, HookMode.Pre);
+        VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Unhook(OnTakeDamage, HookMode.Pre);
     }
 
     private static HookResult OnWeaponFire(EventWeaponFire @event, GameEventInfo info)
     {
-        if (!Instance.Config.WeaponDataList.TryGetValue(@event.Weapon, out WeaponData? weaponData) || weaponData == null)
+        if (!WeaponDataList.TryGetValue(@event.Weapon, out WeaponData? weaponData) || weaponData == null)
         {
             return HookResult.Continue;
         }
@@ -96,9 +98,35 @@ public static class Event
         return HookResult.Continue;
     }
 
+    private static HookResult OnItemPurchase(EventItemPurchase @event, GameEventInfo info)
+    {
+        string weapon = @event.Weapon;
+
+        if (!WeaponDataList.TryGetValue(weapon, out WeaponData? weaponData))
+        {
+            return HookResult.Continue;
+        }
+
+        CCSPlayerController? player = @event.Userid;
+
+        if (player == null)
+        {
+            return HookResult.Continue;
+        }
+
+        if (!Weapon.IsRestricted(player, weapon, weaponData))
+        {
+            return HookResult.Continue;
+        }
+
+        int refund = Weapon.Price(weapon);
+        player.InGameMoneyServices!.Account += refund;
+        return HookResult.Continue;
+    }
+
     private static void OnEntitySpawned(CEntityInstance entity)
     {
-        if (!Instance.Config.WeaponDataList.TryGetValue(entity.DesignerName, out WeaponData? weaponData))
+        if (!WeaponDataList.TryGetValue(entity.DesignerName, out WeaponData? weaponData))
         {
             return;
         }
@@ -123,7 +151,7 @@ public static class Event
 
     private static void OnEntityCreated(CEntityInstance entity)
     {
-        if (!Instance.Config.WeaponDataList.TryGetValue(entity.DesignerName, out WeaponData? weaponData) || string.IsNullOrEmpty(weaponData.Model))
+        if (!WeaponDataList.TryGetValue(entity.DesignerName, out WeaponData? weaponData) || string.IsNullOrEmpty(weaponData.Model))
         {
             return;
         }
@@ -151,7 +179,7 @@ public static class Event
 
     private static void OnServerPrecacheResources(ResourceManifest manifest)
     {
-        foreach (KeyValuePair<string, WeaponData> weaponData in Instance.Config.WeaponDataList)
+        foreach (KeyValuePair<string, WeaponData> weaponData in WeaponDataList)
         {
             if (!string.IsNullOrEmpty(weaponData.Value.Model))
             {
@@ -164,7 +192,7 @@ public static class Event
     {
         CBasePlayerWeapon weapon = hook.GetParam<CBasePlayerWeapon>(1);
 
-        if (!Instance.Config.WeaponDataList.TryGetValue(weapon.DesignerName, out WeaponData? weaponData) || weaponData?.BlockUsing != true)
+        if (!WeaponDataList.TryGetValue(weapon.DesignerName, out WeaponData? weaponData) || weaponData == null)
         {
             return HookResult.Continue;
         }
@@ -177,9 +205,7 @@ public static class Event
             return HookResult.Continue;
         }
 
-        string[]? flags = weaponData.AdminFlagsToIgnoreBlockUsing;
-
-        if (flags?.Length > 0 && AdminManager.PlayerHasPermissions(player, flags))
+        if (!Weapon.IsRestricted(player, weapon.DesignerName, weaponData))
         {
             return HookResult.Continue;
         }
@@ -189,6 +215,79 @@ public static class Event
         weapon.Remove();
         hook.SetReturn(false);
         return HookResult.Handled;
+    }
+
+    private static HookResult OnTakeDamage(DynamicHook hook)
+    {
+        CEntityInstance entity = hook.GetParam<CEntityInstance>(0);
+
+        if (entity.DesignerName != "player")
+        {
+            return HookResult.Continue;
+        }
+
+        CTakeDamageInfo info = hook.GetParam<CTakeDamageInfo>(1);
+        CBaseEntity? weapon = info.Ability.Value;
+
+        if (weapon == null || !WeaponDataList.TryGetValue(weapon.DesignerName, out WeaponData? weaponData) || weaponData == null)
+        {
+            return HookResult.Continue;
+        }
+
+        if (weaponData.OnlyHeadshot == true && GetHitGroup(hook) != HitGroup_t.HITGROUP_HEAD)
+        {
+            return HookResult.Handled;
+        }
+
+        if (weaponData.Damage != null)
+        {
+            info.Damage = SetDamage(info.Damage);
+            return HookResult.Changed;
+        }
+
+        return HookResult.Continue;
+
+        static unsafe HitGroup_t GetHitGroup(DynamicHook hook)
+        {
+            nint info = hook.GetParam<nint>(1);
+            nint v4 = *(nint*)(info + 0x68);
+
+            if (v4 == nint.Zero)
+            {
+                return HitGroup_t.HITGROUP_INVALID;
+            }
+
+            nint v1 = *(nint*)(v4 + 16);
+
+            HitGroup_t hitgroup = HitGroup_t.HITGROUP_GENERIC;
+
+            if (v1 != nint.Zero)
+            {
+                hitgroup = (HitGroup_t)(*(uint*)(v1 + 56));
+            }
+
+            return hitgroup;
+        }
+
+        float SetDamage(float oldDamage)
+        {
+            char operation = weaponData.Damage[0];
+            string valuePart = weaponData.Damage[1..];
+
+            if (!int.TryParse(valuePart, out int value))
+            {
+                return oldDamage;
+            }
+
+            return operation switch
+            {
+                '+' => oldDamage + value,
+                '-' => oldDamage - value,
+                '*' => oldDamage * value,
+                '/' => value != 0 ? oldDamage / value : oldDamage,
+                _ => int.TryParse(weaponData.Damage, out value) ? value : oldDamage
+            };
+        }
     }
 
     private static unsafe CBaseViewModel? ViewModel(CCSPlayerController player)
