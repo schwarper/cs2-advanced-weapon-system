@@ -96,21 +96,6 @@ public static class Config
             }
 
             WeaponDataList[weaponName] = weaponData;
-
-            Server.PrintToConsole($@"
-                Weapon: {weaponName}
-                Clip: {weaponData.Clip?.ToString() ?? "null"}
-                Ammo: {weaponData.Ammo?.ToString() ?? "null"}
-                BlockUsing: {weaponData.BlockUsing?.ToString() ?? "null"}
-                ReloadAfterShoot: {weaponData.ReloadAfterShoot?.ToString() ?? "null"}
-                UnlimitedAmmo: {weaponData.UnlimitedAmmo?.ToString() ?? "null"}
-                UnlimitedClip: {weaponData.UnlimitedClip?.ToString() ?? "null"}
-                OnlyHeadshot: {weaponData.OnlyHeadshot?.ToString() ?? "null"}
-                Model: {weaponData.Model ?? "null"}
-                AdminFlagsToIgnoreBlockUsing: {string.Join(", ", weaponData.AdminFlagsToIgnoreBlockUsing ?? [])}
-                WeaponQuota: {string.Join(", ", weaponData.WeaponQuota.Select(kvp => $"{kvp.Key}: {kvp.Value}"))}
-                Damage: {weaponData.Damage ?? "null"}
-            ");
         }
     }
 
