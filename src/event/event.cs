@@ -12,6 +12,33 @@ namespace AdvancedWeaponSystem;
 
 public static class Event
 {
+    private enum AcquireMethod : int
+    {
+        PickUp = 0,
+        Buy,
+    };
+
+    private enum AcquireResult : int
+    {
+        Allowed = 0,
+        InvalidItem,
+        AlreadyOwned,
+        AlreadyPurchased,
+        ReachedGrenadeTypeLimit,
+        ReachedGrenadeTotalLimit,
+        NotAllowedByTeam,
+        NotAllowedByMap,
+        NotAllowedByMode,
+        NotAllowedForPurchase,
+        NotAllowedByProhibition,
+    };
+
+    private static readonly MemoryFunctionWithReturn<int, string, CCSWeaponBaseVData> GetCSWeaponDataFromKeyFunc =
+        new(GameData.GetSignature("GetCSWeaponDataFromKey"));
+
+    private static readonly MemoryFunctionWithReturn<CCSPlayer_ItemServices, CEconItemView, AcquireMethod, NativeObject, AcquireResult> CCSPlayer_CanAcquireFunc =
+        new(GameData.GetSignature("CCSPlayer_CanAcquire"));
+
     public static void Load()
     {
         Instance.RegisterEventHandler<EventWeaponFire>(OnWeaponFire);
@@ -21,16 +48,16 @@ public static class Event
         Instance.RegisterListener<OnEntityCreated>(OnEntityCreated);
         Instance.RegisterListener<OnServerPrecacheResources>(OnServerPrecacheResources);
 
-        VirtualFunctions.CCSPlayer_WeaponServices_CanUseFunc.Hook(OnCanUse, HookMode.Pre);
         VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Hook(OnTakeDamage, HookMode.Pre);
+        CCSPlayer_CanAcquireFunc.Hook(OnWeaponCanAcquire, HookMode.Pre);
     }
 
     public static void Unload()
     {
         Instance.RemoveListener<OnEntitySpawned>(OnEntitySpawned);
         Instance.RemoveListener<OnEntityCreated>(OnEntityCreated);
-        VirtualFunctions.CCSPlayer_WeaponServices_CanUseFunc.Unhook(OnCanUse, HookMode.Pre);
         VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Unhook(OnTakeDamage, HookMode.Pre);
+        CCSPlayer_CanAcquireFunc.Unhook(OnWeaponCanAcquire, HookMode.Pre);
     }
 
     private static HookResult OnWeaponFire(EventWeaponFire @event, GameEventInfo info)
@@ -80,10 +107,12 @@ public static class Event
 
     private static HookResult OnItemEquip(EventItemEquip @event, GameEventInfo info)
     {
-        CCSPlayerController? player = @event.Userid;
-        CBasePlayerWeapon? activeweapon = player?.PlayerPawn.Value?.WeaponServices?.ActiveWeapon.Value;
+        if (@event.Userid is not CCSPlayerController player)
+        {
+            return HookResult.Continue;
+        }
 
-        if (activeweapon == null)
+        if (player.PlayerPawn.Value?.WeaponServices?.ActiveWeapon.Value is not CBasePlayerWeapon activeweapon)
         {
             return HookResult.Continue;
         }
@@ -92,7 +121,7 @@ public static class Event
 
         if (!string.IsNullOrEmpty(globalname))
         {
-            ViewModel(player!)?.SetModel(globalname.Split(',')[1]);
+            ViewModel(player)?.SetModel(globalname.Split(',')[1]);
         }
 
         return HookResult.Continue;
@@ -107,9 +136,7 @@ public static class Event
             return HookResult.Continue;
         }
 
-        CCSPlayerController? player = @event.Userid;
-
-        if (player == null)
+        if (@event.Userid is not CCSPlayerController player)
         {
             return HookResult.Continue;
         }
@@ -131,9 +158,7 @@ public static class Event
             return;
         }
 
-        CCSWeaponBaseVData? weaponVData = entity.As<CCSWeaponBase>().VData;
-
-        if (weaponVData == null)
+        if (entity.As<CCSWeaponBase>().VData is not CCSWeaponBaseVData weaponVData)
         {
             return;
         }
@@ -165,9 +190,7 @@ public static class Event
                 return;
             }
 
-            CCSPlayerController? player = Utilities.GetPlayerFromSteamId(weapon.OriginalOwnerXuidLow);
-
-            if (player == null)
+            if (Utilities.GetPlayerFromSteamId(weapon.OriginalOwnerXuidLow) is not CCSPlayerController player)
             {
                 return;
             }
@@ -188,40 +211,9 @@ public static class Event
         }
     }
 
-    private static HookResult OnCanUse(DynamicHook hook)
-    {
-        CBasePlayerWeapon weapon = hook.GetParam<CBasePlayerWeapon>(1);
-
-        if (!WeaponDataList.TryGetValue(weapon.DesignerName, out WeaponData? weaponData) || weaponData == null)
-        {
-            return HookResult.Continue;
-        }
-
-        CCSPlayer_WeaponServices weaponServices = hook.GetParam<CCSPlayer_WeaponServices>(0);
-        CCSPlayerController? player = weaponServices.Pawn.Value.Controller.Value?.As<CCSPlayerController>();
-
-        if (player == null)
-        {
-            return HookResult.Continue;
-        }
-
-        if (!Weapon.IsRestricted(player, weapon.DesignerName, weaponData))
-        {
-            return HookResult.Continue;
-        }
-
-        player.PrintToChat($"You cannot use {weapon.DesignerName}");
-
-        weapon.Remove();
-        hook.SetReturn(false);
-        return HookResult.Handled;
-    }
-
     private static HookResult OnTakeDamage(DynamicHook hook)
     {
-        CEntityInstance entity = hook.GetParam<CEntityInstance>(0);
-
-        if (entity.DesignerName != "player")
+        if (hook.GetParam<CEntityInstance>(0).DesignerName is not "player")
         {
             return HookResult.Continue;
         }
@@ -250,7 +242,7 @@ public static class Event
         static unsafe HitGroup_t GetHitGroup(DynamicHook hook)
         {
             nint info = hook.GetParam<nint>(1);
-            nint v4 = *(nint*)(info + 0x68);
+            nint v4 = *(nint*)(info + 0x78);
 
             if (v4 == nint.Zero)
             {
@@ -292,14 +284,12 @@ public static class Event
 
     private static unsafe CBaseViewModel? ViewModel(CCSPlayerController player)
     {
-        nint? handle = player.PlayerPawn.Value?.ViewModelServices?.Handle;
-
-        if (handle == null || !handle.HasValue)
+        if (player.PlayerPawn.Value?.WeaponServices?.Handle is not nint handle)
         {
             return null;
         }
 
-        CCSPlayer_ViewModelServices viewModelServices = new(handle.Value);
+        CCSPlayer_ViewModelServices viewModelServices = new(handle);
 
         nint ptr = viewModelServices.Handle + Schema.GetSchemaOffset("CCSPlayer_ViewModelServices", "m_hViewModel");
         Span<nint> viewModels = MemoryMarshal.CreateSpan(ref ptr, 3);
@@ -307,5 +297,29 @@ public static class Event
         CHandle<CBaseViewModel> viewModel = new(viewModels[0]);
 
         return viewModel.Value;
+    }
+
+    public static HookResult OnWeaponCanAcquire(DynamicHook hook)
+    {
+        CCSWeaponBaseVData vdata = GetCSWeaponDataFromKeyFunc.Invoke(-1, hook.GetParam<CEconItemView>(1).ItemDefinitionIndex.ToString()) ?? throw new Exception("Failed to get CCSWeaponBaseVData");
+
+        if (!WeaponDataList.TryGetValue(vdata.Name, out WeaponData? weaponData) || weaponData == null)
+        {
+            return HookResult.Continue;
+        }
+
+        if (hook.GetParam<CCSPlayer_ItemServices>(0).Pawn.Value?.Controller.Value?.As<CCSPlayerController>() is not CCSPlayerController player)
+        {
+            return HookResult.Continue;
+        }
+
+        if (!Weapon.IsRestricted(player, vdata.Name, weaponData))
+        {
+            return HookResult.Continue;
+        }
+
+        player.PrintToCenterAlert($"You cannot use {vdata.Name}");
+        hook.SetReturn(AcquireResult.NotAllowedByProhibition);
+        return HookResult.Handled;
     }
 }

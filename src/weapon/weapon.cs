@@ -51,31 +51,36 @@ public static class Weapon
 
     private static int Count(ushort defIndex, CHandle<CBasePlayerWeapon> weapon, CCSPlayerController player)
     {
-        int total = 0;
-
-        if (weapon.Value?.AttributeManager.Item.ItemDefinitionIndex != defIndex)
+        if (weapon.Value?.AttributeManager.Item.ItemDefinitionIndex is not ushort index || index != defIndex)
         {
             return 0;
         }
 
-        switch (weapon.Value.AttributeManager.Item.ItemDefinitionIndex)
+        if (player.PlayerPawn.Value?.WeaponServices is not CPlayer_WeaponServices weaponServices)
+        {
+            return 0;
+        }
+
+        int total = 0;
+
+        switch (index)
         {
             case (ushort)ItemDefinition.FRAG_GRENADE:
             case (ushort)ItemDefinition.HIGH_EXPLOSIVE_GRENADE:
-                total += player.PlayerPawn.Value!.WeaponServices!.Ammo[13];
+                total += weaponServices.Ammo[13];
                 break;
             case (ushort)ItemDefinition.FLASHBANG:
-                total += player.PlayerPawn.Value!.WeaponServices!.Ammo[14];
+                total += weaponServices.Ammo[14];
                 break;
             case (ushort)ItemDefinition.SMOKE_GRENADE:
-                total += player.PlayerPawn.Value!.WeaponServices!.Ammo[15];
+                total += weaponServices.Ammo[15];
                 break;
             case (ushort)ItemDefinition.MOLOTOV:
             case (ushort)ItemDefinition.INCENDIARY_GRENADE:
-                total += player.PlayerPawn.Value!.WeaponServices!.Ammo[16];
+                total += weaponServices.Ammo[16];
                 break;
             case (ushort)ItemDefinition.DECOY_GRENADE:
-                total += player.PlayerPawn.Value!.WeaponServices!.Ammo[17];
+                total += weaponServices.Ammo[17];
                 break;
             default:
                 total++;
