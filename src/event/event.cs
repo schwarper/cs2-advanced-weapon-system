@@ -1,5 +1,6 @@
 ﻿using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Core.Translations;
 using CounterStrikeSharp.API.Modules.Memory;
 using CounterStrikeSharp.API.Modules.Memory.DynamicFunctions;
 using CounterStrikeSharp.API.Modules.Utils;
@@ -12,44 +13,16 @@ namespace AdvancedWeaponSystem;
 
 public static class Event
 {
-    private enum AcquireMethod : int
-    {
-        PickUp = 0,
-        Buy,
-    };
-
-    private enum AcquireResult : int
-    {
-        Allowed = 0,
-        InvalidItem,
-        AlreadyOwned,
-        AlreadyPurchased,
-        ReachedGrenadeTypeLimit,
-        ReachedGrenadeTotalLimit,
-        NotAllowedByTeam,
-        NotAllowedByMap,
-        NotAllowedByMode,
-        NotAllowedForPurchase,
-        NotAllowedByProhibition,
-    };
-
-    private static readonly MemoryFunctionWithReturn<int, string, CCSWeaponBaseVData> GetCSWeaponDataFromKeyFunc =
-        new(GameData.GetSignature("GetCSWeaponDataFromKey"));
-
-    private static readonly MemoryFunctionWithReturn<CCSPlayer_ItemServices, CEconItemView, AcquireMethod, NativeObject, AcquireResult> CCSPlayer_CanAcquireFunc =
-        new(GameData.GetSignature("CCSPlayer_CanAcquire"));
-
     public static void Load()
     {
         Instance.RegisterEventHandler<EventWeaponFire>(OnWeaponFire);
         Instance.RegisterEventHandler<EventItemEquip>(OnItemEquip);
-        Instance.RegisterEventHandler<EventItemPurchase>(OnItemPurchase, HookMode.Pre);
         Instance.RegisterListener<OnEntitySpawned>(OnEntitySpawned);
         Instance.RegisterListener<OnEntityCreated>(OnEntityCreated);
         Instance.RegisterListener<OnServerPrecacheResources>(OnServerPrecacheResources);
 
         VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Hook(OnTakeDamage, HookMode.Pre);
-        CCSPlayer_CanAcquireFunc.Hook(OnWeaponCanAcquire, HookMode.Pre);
+        VirtualFunctions.CCSPlayer_ItemServices_CanAcquireFunc.Hook(OnWeaponCanAcquire, HookMode.Pre);
     }
 
     public static void Unload()
@@ -57,7 +30,7 @@ public static class Event
         Instance.RemoveListener<OnEntitySpawned>(OnEntitySpawned);
         Instance.RemoveListener<OnEntityCreated>(OnEntityCreated);
         VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Unhook(OnTakeDamage, HookMode.Pre);
-        CCSPlayer_CanAcquireFunc.Unhook(OnWeaponCanAcquire, HookMode.Pre);
+        VirtualFunctions.CCSPlayer_ItemServices_CanAcquireFunc.Unhook(OnWeaponCanAcquire, HookMode.Pre);
     }
 
     private static HookResult OnWeaponFire(EventWeaponFire @event, GameEventInfo info)
@@ -124,30 +97,6 @@ public static class Event
             ViewModel(player)?.SetModel(globalname.Split(',')[1]);
         }
 
-        return HookResult.Continue;
-    }
-
-    private static HookResult OnItemPurchase(EventItemPurchase @event, GameEventInfo info)
-    {
-        string weapon = @event.Weapon;
-
-        if (!WeaponDataList.TryGetValue(weapon, out WeaponData? weaponData))
-        {
-            return HookResult.Continue;
-        }
-
-        if (@event.Userid is not CCSPlayerController player)
-        {
-            return HookResult.Continue;
-        }
-
-        if (!Weapon.IsRestricted(player, weapon, weaponData))
-        {
-            return HookResult.Continue;
-        }
-
-        int refund = Weapon.Price(weapon);
-        player.InGameMoneyServices!.Account += refund;
         return HookResult.Continue;
     }
 
@@ -301,7 +250,7 @@ public static class Event
 
     public static HookResult OnWeaponCanAcquire(DynamicHook hook)
     {
-        CCSWeaponBaseVData vdata = GetCSWeaponDataFromKeyFunc.Invoke(-1, hook.GetParam<CEconItemView>(1).ItemDefinitionIndex.ToString()) ?? throw new Exception("Failed to get CCSWeaponBaseVData");
+        CCSWeaponBaseVData vdata = VirtualFunctions.GetCSWeaponDataFromKeyFunc.Invoke(-1, hook.GetParam<CEconItemView>(1).ItemDefinitionIndex.ToString()) ?? throw new Exception("Failed to get CCSWeaponBaseVData");
 
         if (!WeaponDataList.TryGetValue(vdata.Name, out WeaponData? weaponData) || weaponData == null)
         {
@@ -318,7 +267,11 @@ public static class Event
             return HookResult.Continue;
         }
 
-        player.PrintToCenterAlert($"You cannot use {vdata.Name}");
+        using (new WithTemporaryCulture(player.GetLanguage()))
+        {
+            player.PrintToCenterAlert(Instance.Localizer["You cannot use this weapon", vdata.Name]);
+        }
+
         hook.SetReturn(AcquireResult.NotAllowedByProhibition);
         return HookResult.Handled;
     }

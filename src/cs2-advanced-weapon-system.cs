@@ -5,7 +5,7 @@ namespace AdvancedWeaponSystem;
 public class AdvancedWeaponSystem : BasePlugin
 {
     public override string ModuleName => "Advanced Weapon System";
-    public override string ModuleVersion => "0.0.4";
+    public override string ModuleVersion => "0.0.5";
     public override string ModuleAuthor => "schwarper";
 
     public static AdvancedWeaponSystem Instance { get; set; } = new();
