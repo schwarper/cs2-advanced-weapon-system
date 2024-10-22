@@ -267,9 +267,12 @@ public static class Event
             return HookResult.Continue;
         }
 
-        using (new WithTemporaryCulture(player.GetLanguage()))
+        if (!player.IsBot)
         {
-            player.PrintToCenterAlert(Instance.Localizer["You cannot use this weapon", vdata.Name]);
+            using (new WithTemporaryCulture(player.GetLanguage()))
+            {
+                player.PrintToCenterAlert(Instance.Localizer["You cannot use this weapon", vdata.Name]);
+            }
         }
 
         hook.SetReturn(AcquireResult.NotAllowedByProhibition);
