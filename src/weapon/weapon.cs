@@ -1,47 +1,153 @@
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Admin;
+using CounterStrikeSharp.API.Modules.Entities;
 using CounterStrikeSharp.API.Modules.Entities.Constants;
+using CounterStrikeSharp.API.Modules.Memory;
 using CounterStrikeSharp.API.Modules.Utils;
+using System.Runtime.InteropServices;
 using static AdvancedWeaponSystem.Config;
 
 namespace AdvancedWeaponSystem;
 
 public static class Weapon
 {
+    public enum GlobalNameData
+    {
+        ViewModelDefault,
+        ViewModel,
+        WorldModel
+    }
+
     public static ushort DefIndex(string weaponName)
     {
         return weaponsList[weaponName];
     }
 
-    public static bool IsRestricted(CCSPlayerController player, string weaponName, WeaponData weaponData)
+    public static string GetDesignerName(CBasePlayerWeapon weapon)
+    {
+        string weaponDesignerName = weapon.DesignerName;
+        ushort weaponIndex = weapon.AttributeManager.Item.ItemDefinitionIndex;
+
+        return (weaponDesignerName, weaponIndex) switch
+        {
+            var (name, _) when name.Contains("bayonet") => "weapon_knife",
+            ("weapon_m4a1", 60) => "weapon_m4a1_silencer",
+            ("weapon_hkp2000", 61) => "weapon_usp_silencer",
+            ("weapon_mp7", 23) => "weapon_mp5sd",
+            _ => weaponDesignerName
+        };
+    }
+
+    public static string GetFromGlobalName(string globalName, GlobalNameData data)
+    {
+
+        string[] globalNameSplit = globalName.Split(',');
+
+        return data switch
+        {
+            GlobalNameData.ViewModelDefault => globalNameSplit[0],
+            GlobalNameData.ViewModel => globalNameSplit[1],
+            GlobalNameData.WorldModel => !string.IsNullOrEmpty(globalNameSplit[2]) ? globalNameSplit[2] : globalNameSplit[1],
+            _ => throw new NotImplementedException()
+        };
+    }
+
+    public static string GetViewModel(CCSPlayerController player)
+    {
+        return ViewModel(player)?.VMName ?? string.Empty;
+    }
+
+    public static void SetViewModel(CCSPlayerController player, string model)
+    {
+        ViewModel(player)?.SetModel(model);
+    }
+
+    public static void UpdateModel(CCSPlayerController player, CBasePlayerWeapon weapon, string model, string? worldModel, bool update)
+    {
+        weapon.Globalname = $"{GetViewModel(player)},{model},{worldModel}";
+        weapon.SetModel(!string.IsNullOrEmpty(worldModel) ? worldModel : model);
+
+        if (update)
+        {
+            SetViewModel(player, model);
+        }
+    }
+
+    private static CBaseViewModel? ViewModel(CCSPlayerController player)
+    {
+        nint? handle = player.PlayerPawn.Value?.ViewModelServices?.Handle;
+        if (handle == null || !handle.HasValue) return null;
+
+        CCSPlayer_ViewModelServices viewModelServices = new(handle.Value);
+        nint ptr = viewModelServices.Handle + Schema.GetSchemaOffset("CCSPlayer_ViewModelServices", "m_hViewModel");
+        Span<nint> viewModels = MemoryMarshal.CreateSpan(ref ptr, 3);
+
+        return new CHandle<CBaseViewModel>(viewModels[0]).Value;
+    }
+
+    public static CCSPlayerController? FindTargetFromWeapon(CBasePlayerWeapon weapon)
+    {
+        SteamID steamId = new(weapon.OriginalOwnerXuidLow);
+
+        CCSPlayerController? player = steamId.IsValid()
+                ? Utilities.GetPlayers().FirstOrDefault(p => p.IsValid && p.SteamID == steamId.SteamId64) ?? Utilities.GetPlayerFromSteamId(weapon.OriginalOwnerXuidLow)
+        : Utilities.GetPlayerFromIndex((int)weapon.OwnerEntity.Index) ?? Utilities.GetPlayerFromIndex((int)weapon.As<CCSWeaponBaseGun>().OwnerEntity.Value!.Index);
+
+        return !string.IsNullOrEmpty(player?.PlayerName) ? player : null;
+    }
+
+    public static void SetDamage(CTakeDamageInfo info, WeaponData weaponData)
+    {
+        if (weaponData.Damage == null)
+            return;
+
+        float oldDamage = info.Damage;
+        char operation = weaponData.Damage[0];
+
+        if (int.TryParse(weaponData.Damage[1..], out int value))
+        {
+            info.Damage = operation switch
+            {
+                '+' => oldDamage + value,
+                '-' => oldDamage - value,
+                '*' => oldDamage * value,
+                '/' => value != 0 ? oldDamage / value : oldDamage,
+                _ => int.TryParse(weaponData.Damage, out value) ? value : oldDamage
+            };
+        }
+    }
+
+    public static bool IsRestricted(CCSPlayerController player, string weaponName, WeaponData weaponData, AcquireMethod acquireMethod)
     {
         string[] flags = [.. weaponData.AdminFlagsToIgnoreBlockUsing];
 
-        if (flags.Length > 0 && AdminManager.PlayerHasPermissions(player, flags))
-        {
+        if (flags.Length > 0 && AdminManager.PlayerHasPermissions(new SteamID(player.SteamID), flags))
             return false;
-        }
 
-        if (weaponData.BlockUsing == true)
-        {
+        if (weaponData.BlockUsing == true && (weaponData.IgnorePickUpFromBlockUsing != false || acquireMethod != AcquireMethod.PickUp))
             return true;
-        }
 
         if (weaponData.WeaponQuota.Count > 0)
         {
             ushort defIndex = DefIndex(weaponName);
-
-            List<CCSPlayerController> players = Utilities.GetPlayers().Where(p => p.Team == player.Team).ToList();
+            List<CCSPlayerController> players = [.. Utilities.GetPlayers().Where(p => p.Team == player.Team)];
             int playerCount = players.Count;
-            int maxWeapons = weaponData.WeaponQuota.OrderBy(kvp => kvp.Key)
-                                       .LastOrDefault(kvp => playerCount >= kvp.Key).Value;
 
-            int weaponsCount = players.Sum(player =>
+            int maxWeapons = weaponData.WeaponQuota
+                .Where(kvp => playerCount >= kvp.Key)
+                .Select(kvp => kvp.Value)
+                .DefaultIfEmpty(0)
+                .Max();
+
+            int selector(CHandle<CBasePlayerWeapon> w)
             {
-                int selector(CHandle<CBasePlayerWeapon> w) => Count(defIndex, w, player);
-                return player.PlayerPawn.Value?.WeaponServices?.MyWeapons.Sum(selector) ?? 0;
-            });
+                return Count(defIndex, w, player);
+            }
+
+            int weaponsCount = Utilities.GetPlayers()
+                .Where(p => p.Team == player.Team)
+                .Sum(p => p.PlayerPawn.Value?.WeaponServices?.MyWeapons.Sum(selector) ?? 0);
 
             return weaponsCount >= maxWeapons;
         }
@@ -52,14 +158,10 @@ public static class Weapon
     private static int Count(ushort defIndex, CHandle<CBasePlayerWeapon> weapon, CCSPlayerController player)
     {
         if (weapon.Value?.AttributeManager.Item.ItemDefinitionIndex is not ushort index || index != defIndex)
-        {
             return 0;
-        }
 
         if (player.PlayerPawn.Value?.WeaponServices is not CPlayer_WeaponServices weaponServices)
-        {
             return 0;
-        }
 
         int total = 0;
 
@@ -134,5 +236,4 @@ public static class Weapon
         { "weapon_flashbang", (ushort)ItemDefinition.FLASHBANG },
         { "weapon_decoy", (ushort)ItemDefinition.DECOY_GRENADE }
     };
-
 }

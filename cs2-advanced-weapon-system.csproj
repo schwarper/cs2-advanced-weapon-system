@@ -1,25 +1,25 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-	<OutputPath>BuildOutput\cs2-advanced-weapon-system\</OutputPath>
-	<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<OutputPath>$(ProjectDir)BuildOutput\plugins\cs2-advanced-weapon-system\</OutputPath>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="CounterStrikeSharp.API" Version="1.0.281" />
-    <PackageReference Include="Tomlyn" Version="0.17.0" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="CounterStrikeSharp.API" Version="1.0.314" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <None Update="lang\**\*.*" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
+	<ItemGroup>
+		<None Update="lang\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
 
-	<Target Name="CopyNuGetAssemblies" AfterTargets="Build">
-		<Copy SourceFiles="Tomlyn.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+	<Target Name="CopyConfigFiles" AfterTargets="Build">
+		<ItemGroup>
+			<FilesToCopy Include="$(ProjectDir)cs2-advanced-weapon-system-example.toml" />
+		</ItemGroup>
+		<Copy SourceFiles="@(FilesToCopy)" DestinationFolder="$(ProjectDir)BuildOutput\configs\plugins\cs2-advanced-weapon-system\" />
 	</Target>
-
 </Project>
