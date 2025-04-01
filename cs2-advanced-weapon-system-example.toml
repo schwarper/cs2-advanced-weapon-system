@@ -1,31 +1,32 @@
 [WeaponDatas]
-[["weapon_glock"]]
+
+[WeaponDatas.weapon_glock]
 Clip = 30
 UnlimitedClip = true
 Damage = "1000"
 ReloadAfterShoot = true
 
-[["weapon_deagle"]]
+[WeaponDatas.weapon_deagle]
 Clip = 1
 Ammo = 1
 UnlimitedAmmo = true
 OnlyHeadshot = true
 Damage = "*2"
 
-[["weapon_awp"]]
-WeaponQuota = { 4 = 1, 8 = 2, 16 = 3, 32 = 4 }
+[WeaponDatas.weapon_awp]
+WeaponQuota = { "4" = 1, "8" = 2, "16" = 3, "32" = 4 }
 AdminFlagsToIgnoreBlockUsing = ["@css/root"]
 
-[["weapon_ssg08"]]
+[WeaponDatas.weapon_ssg08]
 BlockUsing = true
 AdminFlagsToIgnoreBlockUsing = ["@css/ban", "@css/unban"]
 Damage = "/2"
 
-[["weapon_aug"]]
+[WeaponDatas.weapon_aug]
 BlockUsing = true
 
-[["weapon_ak47"]]
-WeaponQuota = { 0 = 1, 5 = 2, 10 = 3, 16 = 4, 32 = 5 }
+[WeaponDatas.weapon_ak47]
+WeaponQuota = { "0" = 1, "5" = 2, "10" = 3, "16" = 4, "32" = 5 }
 
 # Supported datas
 
