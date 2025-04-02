@@ -122,7 +122,7 @@ public static class Weapon
     {
         string[] flags = [.. weaponData.AdminFlagsToIgnoreBlockUsing];
 
-        if (flags.Length > 0 && AdminManager.PlayerHasPermissions(new SteamID(player.SteamID), flags))
+        if (flags.Length > 0 && !player.IsBot && AdminManager.PlayerHasPermissions(new SteamID(player.SteamID), flags))
             return false;
 
         if (weaponData.BlockUsing == true && (weaponData.IgnorePickUpFromBlockUsing != false || acquireMethod != AcquireMethod.PickUp))
