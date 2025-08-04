@@ -55,12 +55,35 @@ public static class Weapon
 
     public static string GetViewModel(CCSPlayerController player)
     {
-        return ViewModel(player)?.VMName ?? string.Empty;
-    }
+        var entity = ViewModel(player);
+        if (entity == null || !entity.IsValid)
+            return string.Empty;
 
+        int modelOffset = Schema.GetSchemaOffset("CBaseEntity", "m_ModelName");
+        if (modelOffset == 0)
+            return string.Empty;
+
+        var modelPtr = Marshal.ReadIntPtr(entity.Handle + modelOffset);
+        if (modelPtr == IntPtr.Zero)
+            return string.Empty;
+
+        return Marshal.PtrToStringAnsi(modelPtr) ?? string.Empty;
+    }
+    
     public static void SetViewModel(CCSPlayerController player, string model)
     {
-        ViewModel(player)?.SetModel(model);
+        var entity = ViewModel(player);
+        if (entity == null || !entity.IsValid)
+            return;
+
+        var modelPtr = Marshal.StringToHGlobalAnsi(model);
+
+        int offset = GameData.GetOffset("CBaseModelEntity_SetModel");
+        if (offset == 0)
+
+            VirtualFunction.CreateVoid<nint, nint>(entity.Handle, offset)(entity.Handle, modelPtr);
+
+        Marshal.FreeHGlobal(modelPtr);
     }
 
     public static void UpdateModel(CCSPlayerController player, CBasePlayerWeapon weapon, string model, string? worldModel, bool update)
@@ -74,16 +97,21 @@ public static class Weapon
         }
     }
 
-    private static CBaseViewModel? ViewModel(CCSPlayerController player)
+    private static CBaseEntity? ViewModel(CCSPlayerController player)
     {
-        nint? handle = player.PlayerPawn.Value?.ViewModelServices?.Handle;
-        if (handle == null || !handle.HasValue) return null;
+        var pawn = player.PlayerPawn.Value;
+        if (pawn == null || !pawn.IsValid)
+            return null;
 
-        CCSPlayer_ViewModelServices viewModelServices = new(handle.Value);
-        nint ptr = viewModelServices.Handle + Schema.GetSchemaOffset("CCSPlayer_ViewModelServices", "m_hViewModel");
-        Span<nint> viewModels = MemoryMarshal.CreateSpan(ref ptr, 3);
+        int offset = Schema.GetSchemaOffset("CBasePlayer", "m_hViewModel");
+        if (offset == 0)
+            return null;
 
-        return new CHandle<CBaseViewModel>(viewModels[0]).Value;
+        var handle = Marshal.ReadIntPtr(pawn.Handle + offset);
+        if (handle == IntPtr.Zero)
+            return null;
+
+        return new CHandle<CBaseEntity>(handle).Value;
     }
 
     public static CCSPlayerController? FindTargetFromWeapon(CBasePlayerWeapon weapon)
@@ -236,4 +264,7 @@ public static class Weapon
         { "weapon_flashbang", (ushort)ItemDefinition.FLASHBANG },
         { "weapon_decoy", (ushort)ItemDefinition.DECOY_GRENADE }
     };
+
+    public static readonly Dictionary<ushort, string> WeaponIndexToName = weaponsList
+        .ToDictionary(x => x.Value, x => x.Key);
 }
