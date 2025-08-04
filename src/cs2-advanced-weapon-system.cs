@@ -20,6 +20,7 @@ public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
     public Config Config { get; set; } = new Config();
     public static AdvancedWeaponSystem Instance { get; private set; } = new();
 
+
     public override void Load(bool hotReload)
     {
         Instance = this;
@@ -165,21 +166,23 @@ public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
 
     public HookResult OnWeaponCanAcquire(DynamicHook hook)
     {
-        CCSWeaponBaseVData vdata = VirtualFunctions.GetCSWeaponDataFromKeyFunc.Invoke(-1, hook.GetParam<CEconItemView>(1).ItemDefinitionIndex.ToString()) ?? throw new Exception("Failed to get CCSWeaponBaseVData");
+        var econItem = hook.GetParam<CEconItemView>(1);
+        ushort defIndex = (ushort)econItem.ItemDefinitionIndex;
 
-        if (!Config.WeaponDatas.TryGetValue(vdata.Name, out WeaponData? weaponData))
+        if (!WeaponIndexToName.TryGetValue(defIndex, out var weaponName))
+            return HookResult.Continue;
+
+        if (!Config.WeaponDatas.TryGetValue(weaponName, out WeaponData? weaponData))
             return HookResult.Continue;
 
         if (hook.GetParam<CCSPlayer_ItemServices>(0).Pawn.Value?.Controller.Value?.As<CCSPlayerController>() is not CCSPlayerController player)
             return HookResult.Continue;
 
-        if (!IsRestricted(player, vdata.Name, weaponData, hook.GetParam<AcquireMethod>(2)))
-        {
+        if (!IsRestricted(player, weaponName, weaponData, hook.GetParam<AcquireMethod>(2)))
             return HookResult.Continue;
-        }
 
         if (!player.IsBot)
-            Instance.Localizer.ForPlayer(player, "You cannot use this weapon", vdata.Name);
+            Instance.Localizer.ForPlayer(player, "You cannot use this weapon", weaponName);
 
         hook.SetReturn(AcquireResult.NotAllowedByProhibition);
         return HookResult.Handled;
