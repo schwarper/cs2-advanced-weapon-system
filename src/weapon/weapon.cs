@@ -193,25 +193,36 @@ public static class Weapon
 
         int total = 0;
 
+        const int HE_SLOT = 13;
+        const int FLASH_SLOT = 14;
+        const int SMOKE_SLOT = 15;
+        const int MOLOTOV_SLOT = 16;
+        const int DECOY_SLOT = 17;
+
         switch (index)
         {
             case (ushort)ItemDefinition.FRAG_GRENADE:
             case (ushort)ItemDefinition.HIGH_EXPLOSIVE_GRENADE:
-                total += weaponServices.Ammo[13];
+                total += Math.Max((int)weaponServices.Ammo[HE_SLOT], 1);
                 break;
+
             case (ushort)ItemDefinition.FLASHBANG:
-                total += weaponServices.Ammo[14];
+                total += Math.Max((int)weaponServices.Ammo[FLASH_SLOT], 1);
                 break;
+
             case (ushort)ItemDefinition.SMOKE_GRENADE:
-                total += weaponServices.Ammo[15];
+                total += Math.Max((int)weaponServices.Ammo[SMOKE_SLOT], 1);
                 break;
+
             case (ushort)ItemDefinition.MOLOTOV:
             case (ushort)ItemDefinition.INCENDIARY_GRENADE:
-                total += weaponServices.Ammo[16];
+                total += Math.Max((int)weaponServices.Ammo[MOLOTOV_SLOT], 1);
                 break;
+
             case (ushort)ItemDefinition.DECOY_GRENADE:
-                total += weaponServices.Ammo[17];
+                total += Math.Max((int)weaponServices.Ammo[DECOY_SLOT], 1);
                 break;
+
             default:
                 total++;
                 break;

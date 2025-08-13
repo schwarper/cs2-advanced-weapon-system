@@ -14,7 +14,7 @@ namespace AdvancedWeaponSystem;
 public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
 {
     public override string ModuleName => "Advanced Weapon System";
-    public override string ModuleVersion => "1.5";
+    public override string ModuleVersion => "1.6";
     public override string ModuleAuthor => "schwarper";
 
     public Config Config { get; set; } = new Config();
