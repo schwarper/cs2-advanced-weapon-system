@@ -14,7 +14,7 @@ namespace AdvancedWeaponSystem;
 public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
 {
     public override string ModuleName => "Advanced Weapon System";
-    public override string ModuleVersion => "1.6";
+    public override string ModuleVersion => "1.7";
     public override string ModuleAuthor => "schwarper";
 
     public Config Config { get; set; } = new Config();
@@ -157,7 +157,7 @@ public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
         if (!Config.WeaponDatas.TryGetValue(GetDesignerName(weapon.As<CBasePlayerWeapon>()), out WeaponData? weaponData))
             return HookResult.Continue;
 
-        if (weaponData.OnlyHeadshot == true && info.GetHitGroup() != HitGroup_t.HITGROUP_HEAD)
+        if (weaponData.OnlyHeadshot == true && info.HitGroupId != HitGroup_t.HITGROUP_HEAD)
             return HookResult.Handled;
 
         SetDamage(info, weaponData);
