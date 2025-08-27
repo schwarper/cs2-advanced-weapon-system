@@ -21,6 +21,10 @@ public class Config : BasePluginConfig
         public string? WorldModel { get; set; }
         public List<string> AdminFlagsToIgnoreBlockUsing { get; set; } = [];
         public Dictionary<int, int> WeaponQuota { get; set; } = [];
+
+        // 🔹 Novo polje za restrikcije po mapama
+        public Dictionary<string, Dictionary<int, int>> MapSpecificQuota { get; set; } = [];
+
         public string? Damage { get; set; }
     }
 }

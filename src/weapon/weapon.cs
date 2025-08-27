@@ -41,7 +41,6 @@ public static class Weapon
 
     public static string GetFromGlobalName(string globalName, GlobalNameData data)
     {
-
         string[] globalNameSplit = globalName.Split(',');
 
         return data switch
@@ -69,7 +68,7 @@ public static class Weapon
 
         return Marshal.PtrToStringAnsi(modelPtr) ?? string.Empty;
     }
-    
+
     public static void SetViewModel(CCSPlayerController player, string model)
     {
         var entity = ViewModel(player);
@@ -80,7 +79,6 @@ public static class Weapon
 
         int offset = GameData.GetOffset("CBaseModelEntity_SetModel");
         if (offset == 0)
-
             VirtualFunction.CreateVoid<nint, nint>(entity.Handle, offset)(entity.Handle, modelPtr);
 
         Marshal.FreeHGlobal(modelPtr);
@@ -156,28 +154,42 @@ public static class Weapon
         if (weaponData.BlockUsing == true && (weaponData.IgnorePickUpFromBlockUsing != false || acquireMethod != AcquireMethod.PickUp))
             return true;
 
-        if (weaponData.WeaponQuota.Count > 0)
+        if (weaponData.WeaponQuota.Count > 0 || weaponData.MapSpecificQuota.Count > 0)
         {
             ushort defIndex = DefIndex(weaponName);
             List<CCSPlayerController> players = [.. Utilities.GetPlayers().Where(p => p.Team == player.Team)];
             int playerCount = players.Count;
 
-            int maxWeapons = weaponData.WeaponQuota
+            string currentMap = Server.MapName.ToLower();
+
+            // 🔹 Ako postoji MapSpecificQuota za ovu mapu, koristi ga
+            if (weaponData.MapSpecificQuota.TryGetValue(currentMap, out var mapQuota) && mapQuota.Count > 0)
+            {
+                int maxWeapons = mapQuota
+                    .Where(kvp => playerCount >= kvp.Key)
+                    .Select(kvp => kvp.Value)
+                    .DefaultIfEmpty(0)
+                    .Max();
+
+                int weaponsCount = Utilities.GetPlayers()
+                    .Where(p => p.Team == player.Team)
+                    .Sum(p => p.PlayerPawn.Value?.WeaponServices?.MyWeapons.Sum(w => Count(defIndex, w, player)) ?? 0);
+
+                return weaponsCount >= maxWeapons;
+            }
+
+            // Inače koristi globalni WeaponQuota
+            int maxGlobal = weaponData.WeaponQuota
                 .Where(kvp => playerCount >= kvp.Key)
                 .Select(kvp => kvp.Value)
                 .DefaultIfEmpty(0)
                 .Max();
 
-            int selector(CHandle<CBasePlayerWeapon> w)
-            {
-                return Count(defIndex, w, player);
-            }
-
-            int weaponsCount = Utilities.GetPlayers()
+            int globalCount = Utilities.GetPlayers()
                 .Where(p => p.Team == player.Team)
-                .Sum(p => p.PlayerPawn.Value?.WeaponServices?.MyWeapons.Sum(selector) ?? 0);
+                .Sum(p => p.PlayerPawn.Value?.WeaponServices?.MyWeapons.Sum(w => Count(defIndex, w, player)) ?? 0);
 
-            return weaponsCount >= maxWeapons;
+            return globalCount >= maxGlobal;
         }
 
         return false;
