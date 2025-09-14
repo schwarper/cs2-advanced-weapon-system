@@ -3,22 +3,13 @@ using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Entities;
 using CounterStrikeSharp.API.Modules.Entities.Constants;
-using CounterStrikeSharp.API.Modules.Memory;
 using CounterStrikeSharp.API.Modules.Utils;
-using System.Runtime.InteropServices;
 using static AdvancedWeaponSystem.Config;
 
 namespace AdvancedWeaponSystem;
 
 public static class Weapon
 {
-    public enum GlobalNameData
-    {
-        ViewModelDefault,
-        ViewModel,
-        WorldModel
-    }
-
     public static ushort DefIndex(string weaponName)
     {
         return weaponsList[weaponName];
@@ -26,101 +17,7 @@ public static class Weapon
 
     public static string GetDesignerName(CBasePlayerWeapon weapon)
     {
-        string weaponDesignerName = weapon.DesignerName;
-        ushort weaponIndex = weapon.AttributeManager.Item.ItemDefinitionIndex;
-
-        return (weaponDesignerName, weaponIndex) switch
-        {
-            var (name, _) when name.Contains("bayonet") => "weapon_knife",
-            ("weapon_m4a1", 60) => "weapon_m4a1_silencer",
-            ("weapon_hkp2000", 61) => "weapon_usp_silencer",
-            ("weapon_mp7", 23) => "weapon_mp5sd",
-            _ => weaponDesignerName
-        };
-    }
-
-    public static string GetFromGlobalName(string globalName, GlobalNameData data)
-    {
-        string[] globalNameSplit = globalName.Split(',');
-
-        return data switch
-        {
-            GlobalNameData.ViewModelDefault => globalNameSplit[0],
-            GlobalNameData.ViewModel => globalNameSplit[1],
-            GlobalNameData.WorldModel => !string.IsNullOrEmpty(globalNameSplit[2]) ? globalNameSplit[2] : globalNameSplit[1],
-            _ => throw new NotImplementedException()
-        };
-    }
-
-    public static string GetViewModel(CCSPlayerController player)
-    {
-        var entity = ViewModel(player);
-        if (entity == null || !entity.IsValid)
-            return string.Empty;
-
-        int modelOffset = Schema.GetSchemaOffset("CBaseEntity", "m_ModelName");
-        if (modelOffset == 0)
-            return string.Empty;
-
-        var modelPtr = Marshal.ReadIntPtr(entity.Handle + modelOffset);
-        if (modelPtr == IntPtr.Zero)
-            return string.Empty;
-
-        return Marshal.PtrToStringAnsi(modelPtr) ?? string.Empty;
-    }
-
-    public static void SetViewModel(CCSPlayerController player, string model)
-    {
-        var entity = ViewModel(player);
-        if (entity == null || !entity.IsValid)
-            return;
-
-        var modelPtr = Marshal.StringToHGlobalAnsi(model);
-
-        int offset = GameData.GetOffset("CBaseModelEntity_SetModel");
-        if (offset == 0)
-            VirtualFunction.CreateVoid<nint, nint>(entity.Handle, offset)(entity.Handle, modelPtr);
-
-        Marshal.FreeHGlobal(modelPtr);
-    }
-
-    public static void UpdateModel(CCSPlayerController player, CBasePlayerWeapon weapon, string model, string? worldModel, bool update)
-    {
-        weapon.Globalname = $"{GetViewModel(player)},{model},{worldModel}";
-        weapon.SetModel(!string.IsNullOrEmpty(worldModel) ? worldModel : model);
-
-        if (update)
-        {
-            SetViewModel(player, model);
-        }
-    }
-
-    private static CBaseEntity? ViewModel(CCSPlayerController player)
-    {
-        var pawn = player.PlayerPawn.Value;
-        if (pawn == null || !pawn.IsValid)
-            return null;
-
-        int offset = Schema.GetSchemaOffset("CBasePlayer", "m_hViewModel");
-        if (offset == 0)
-            return null;
-
-        var handle = Marshal.ReadIntPtr(pawn.Handle + offset);
-        if (handle == IntPtr.Zero)
-            return null;
-
-        return new CHandle<CBaseEntity>(handle).Value;
-    }
-
-    public static CCSPlayerController? FindTargetFromWeapon(CBasePlayerWeapon weapon)
-    {
-        SteamID steamId = new(weapon.OriginalOwnerXuidLow);
-
-        CCSPlayerController? player = steamId.IsValid()
-                ? Utilities.GetPlayers().FirstOrDefault(p => p.IsValid && p.SteamID == steamId.SteamId64) ?? Utilities.GetPlayerFromSteamId(weapon.OriginalOwnerXuidLow)
-        : Utilities.GetPlayerFromIndex((int)weapon.OwnerEntity.Index) ?? Utilities.GetPlayerFromIndex((int)weapon.As<CCSWeaponBaseGun>().OwnerEntity.Value!.Index);
-
-        return !string.IsNullOrEmpty(player?.PlayerName) ? player : null;
+        return weapon.GetVData<CCSWeaponBaseVData>()?.Name ?? "weapon_unknown";
     }
 
     public static void SetDamage(CTakeDamageInfo info, WeaponData weaponData)
@@ -163,7 +60,7 @@ public static class Weapon
             string currentMap = Server.MapName.ToLower();
 
             // 🔹 Ako postoji MapSpecificQuota za ovu mapu, koristi ga
-            if (weaponData.MapSpecificQuota.TryGetValue(currentMap, out var mapQuota) && mapQuota.Count > 0)
+            if (weaponData.MapSpecificQuota.TryGetValue(currentMap, out Dictionary<int, int>? mapQuota) && mapQuota.Count > 0)
             {
                 int maxWeapons = mapQuota
                     .Where(kvp => playerCount >= kvp.Key)

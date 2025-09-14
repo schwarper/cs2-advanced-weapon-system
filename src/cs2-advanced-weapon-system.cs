@@ -1,4 +1,3 @@
-using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Core.Translations;
@@ -14,7 +13,7 @@ namespace AdvancedWeaponSystem;
 public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
 {
     public override string ModuleName => "Advanced Weapon System";
-    public override string ModuleVersion => "1.9";
+    public override string ModuleVersion => "1.10";
     public override string ModuleAuthor => "schwarper";
 
     public Config Config { get; set; } = new Config();
@@ -71,23 +70,6 @@ public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
         return HookResult.Continue;
     }
 
-    [GameEventHandler]
-    public HookResult OnItemEquip(EventItemEquip @event, GameEventInfo info)
-    {
-        if (@event.Userid is not { } player || player.PlayerPawn.Value?.WeaponServices?.ActiveWeapon.Value is not { } activeWeapon)
-            return HookResult.Continue;
-
-        string globalname = activeWeapon.Globalname;
-
-        if (!string.IsNullOrEmpty(globalname))
-        {
-            string model = GetFromGlobalName(globalname, GlobalNameData.ViewModel);
-            SetViewModel(player, model);
-        }
-
-        return HookResult.Continue;
-    }
-
     [ListenerHandler<OnEntitySpawned>]
     public void OnEntitySpawned(CEntityInstance entity)
     {
@@ -105,27 +87,6 @@ public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
 
         if (weaponData.Ammo.HasValue)
             weaponVData.PrimaryReserveAmmoMax = weaponData.Ammo.Value;
-    }
-
-    [ListenerHandler<OnEntityCreated>]
-    public void OnEntityCreated(CEntityInstance entity)
-    {
-        Server.NextWorldUpdate(() =>
-        {
-            CBasePlayerWeapon weapon = new(entity.Handle);
-
-            if (!entity.IsValid || weapon.OriginalOwnerXuidLow <= 0)
-                return;
-
-            if (!Config.WeaponDatas.TryGetValue(GetDesignerName(weapon), out WeaponData? weaponData) || string.IsNullOrEmpty(weaponData.ViewModel))
-                return;
-
-            if (FindTargetFromWeapon(weapon) is not { } player)
-                return;
-
-            CBasePlayerWeapon? activeWeapon = player.PlayerPawn.Value?.WeaponServices?.ActiveWeapon.Value;
-            UpdateModel(player, weapon, weaponData.ViewModel, weaponData.WorldModel, weapon == activeWeapon);
-        });
     }
 
     [ListenerHandler<OnServerPrecacheResources>]
@@ -166,10 +127,10 @@ public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
 
     public HookResult OnWeaponCanAcquire(DynamicHook hook)
     {
-        var econItem = hook.GetParam<CEconItemView>(1);
-        ushort defIndex = (ushort)econItem.ItemDefinitionIndex;
+        CEconItemView econItem = hook.GetParam<CEconItemView>(1);
+        ushort defIndex = econItem.ItemDefinitionIndex;
 
-        if (!WeaponIndexToName.TryGetValue(defIndex, out var weaponName))
+        if (!WeaponIndexToName.TryGetValue(defIndex, out string? weaponName))
             return HookResult.Continue;
 
         if (!Config.WeaponDatas.TryGetValue(weaponName, out WeaponData? weaponData))
