@@ -89,19 +89,6 @@ public class AdvancedWeaponSystem : BasePlugin, IPluginConfig<Config>
             weaponVData.PrimaryReserveAmmoMax = weaponData.Ammo.Value;
     }
 
-    [ListenerHandler<OnServerPrecacheResources>]
-    public void OnServerPrecacheResources(ResourceManifest manifest)
-    {
-        foreach (KeyValuePair<string, WeaponData> weaponData in Config.WeaponDatas)
-        {
-            if (!string.IsNullOrEmpty(weaponData.Value.ViewModel))
-                manifest.AddResource(weaponData.Value.ViewModel);
-
-            if (!string.IsNullOrEmpty(weaponData.Value.WorldModel))
-                manifest.AddResource(weaponData.Value.WorldModel);
-        }
-    }
-
     public HookResult OnTakeDamage(DynamicHook hook)
     {
         if (hook.GetParam<CEntityInstance>(0).DesignerName is not "player")

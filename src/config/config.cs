@@ -17,8 +17,6 @@ public class Config : BasePluginConfig
         public bool? UnlimitedAmmo { get; set; }
         public bool? UnlimitedClip { get; set; }
         public bool? OnlyHeadshot { get; set; }
-        public string? ViewModel { get; set; }
-        public string? WorldModel { get; set; }
         public List<string> AdminFlagsToIgnoreBlockUsing { get; set; } = [];
         public Dictionary<int, int> WeaponQuota { get; set; } = [];
 
